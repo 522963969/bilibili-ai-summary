@@ -1,0 +1,13 @@
+# 统一用 LF，避免 Windows 上 checkout 后整片文件显示“已修改”
+* text=auto eol=lf
+
+# 二进制资源不要做换行转换，否则字节会变、图片损坏
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.zip binary
+*.crx binary
+
+# lock 文件体积大且逐行 diff 无意义
+package-lock.json text eol=lf -diff

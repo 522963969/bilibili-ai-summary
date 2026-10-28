@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>B站 AI 视频总结 · 安装与使用说明</title>
+<style>
+  :root {
+    --ink: #1f2329;
+    --ink-soft: #5b6470;
+    --line: #e6e8eb;
+    --brand: #fb7299;
+    --bg: #ffffff;
+    --bg-soft: #fafbfc;
+    --warn-bg: #fff7f0;
+    --warn-line: #ffd9bf;
+    --ok: #1a9e5c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 40px 20px 72px;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.75 -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 760px; margin: 0 auto; }
+
+  header { padding-bottom: 22px; border-bottom: 2px solid var(--ink); margin-bottom: 28px; }
+  h1 { margin: 0 0 8px; font-size: 26px; letter-spacing: -0.2px; }
+  .ver {
+    display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 4px;
+    background: var(--brand); color: #fff; font-size: 12px; font-weight: 600; vertical-align: 3px;
+  }
+  .lead { margin: 0; color: var(--ink-soft); }
+
+  .callout {
+    margin: 0 0 32px; padding: 16px 18px; border: 1px solid var(--warn-line);
+    border-left: 4px solid var(--brand); border-radius: 6px; background: var(--warn-bg);
+  }
+  .callout strong { display: block; margin-bottom: 4px; }
+
+  h2 { margin: 36px 0 14px; font-size: 18px; }
+  .step { margin: 0 0 26px; }
+  .step__head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .step__num {
+    flex: 0 0 24px; width: 24px; height: 24px; border-radius: 50%;
+    background: var(--ink); color: #fff; font-size: 13px; font-weight: 600;
+    display: grid; place-items: center;
+  }
+  .step__title { font-size: 16px; font-weight: 600; }
+  .step__body { padding-left: 34px; }
+  .step__body p { margin: 0 0 10px; }
+  .step__body p:last-child { margin-bottom: 0; }
+
+  code, .path {
+    padding: 1px 6px; border-radius: 4px; background: #f2f3f5;
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 13px;
+  }
+  .kbd {
+    padding: 1px 6px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px;
+    background: var(--bg-soft); font-size: 13px; white-space: nowrap;
+  }
+  ol, ul { margin: 0 0 10px; padding-left: 22px; }
+  li { margin: 4px 0; }
+
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .card { padding: 14px 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg-soft); }
+  .card h3 { margin: 0 0 8px; font-size: 14px; }
+  .card ol { padding-left: 20px; margin: 0; font-size: 14px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  th { background: var(--bg-soft); font-weight: 600; white-space: nowrap; }
+  td:first-child { width: 42%; }
+
+  .privacy { padding: 16px 18px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg-soft); }
+  .privacy ul { margin: 0; }
+
+  footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--ink-soft); font-size: 13px; }
+  .dot { color: var(--ok); font-weight: 700; }
+
+  @media (max-width: 620px) {
+    .cols { grid-template-columns: 1fr; }
+    body { padding: 24px 16px 48px; }
+  }
+  @media print {
+    body { padding: 0; }
+    .callout, .card, .privacy { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<main>
+
+  <header>
+    <h1>B站 AI 视频总结<span class="ver">{{VERSION}}</span></h1>
+    <p class="lead">在 B 站视频页读取字幕，用你自己的大模型生成摘要、章节与思维导图。这是一个浏览器扩展，没有安装程序，也没有 EXE。</p>
+  </header>
+
+  <div class="callout">
+    <strong>先说最重要的一件事：它本身不会“思考”</strong>
+    扩展不带 AI 能力，也不经过任何人的服务器。你需要自己准备一个大模型服务的地址和一个 API Key（OpenAI、DeepSeek、月之暗面、硅基流动等都行，也可以是自己或公司搭的），填进去才能真正生成总结。没有 Key 时，面板能打开，但只会提示「未配置」。
+  </div>
+
+  <h2>安装</h2>
+
+  <div class="step">
+    <div class="step__head"><span class="step__num">1</span><span class="step__title">解压到一个不会被删的文件夹</span></div>
+    <div class="step__body">
+      <p>右键这个 zip →「全部解压缩」，解压到比如 <span class="path">D:\bilibili-ai-summary</span> 或「文档」里的一个文件夹。</p>
+      <p>解压出来的这一层就是扩展本体，能看到 <code>manifest.json</code>、<code>assets</code>、<code>icons</code> 这些。请记住这个位置：<strong>以后不能删、不能改名、不能移动</strong>，否则扩展会失效。也别解压到「下载」文件夹，那里容易被清理。</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step__head"><span class="step__num">2</span><span class="step__title">在浏览器里加载这个文件夹</span></div>
+    <div class="step__body">
+      <div class="cols">
+        <div class="card">
+          <h3>Chrome / Edge 通用</h3>
+          <ol>
+            <li>地址栏输入 <code>chrome://extensions</code>（Edge 用 <code>edge://extensions</code>）</li>
+            <li>打开右上角（Edge 在左下角）的<strong>开发者模式</strong></li>
+            <li>点<strong>加载已解压的扩展程序</strong></li>
+            <li>选中第 1 步解压出来的那个文件夹（里面直接有 manifest.json 的那一层）</li>
+            <li>列表里出现「B站 AI 视频总结」即成功</li>
+          </ol>
+        </div>
+        <div class="card">
+          <h3>会看到的提示（都正常）</h3>
+          <ol>
+            <li>顶部出现「请停用开发者模式扩展」的黄色提示条 —— 点 × 关掉即可</li>
+            <li>扩展图标默认藏在拼图菜单里，建议点图钉固定到工具栏</li>
+            <li>浏览器大版本更新后，扩展可能被自动停用 —— 回扩展页把它重新打开</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step__head"><span class="step__num">3</span><span class="step__title">填自己的模型服务（这一步不做，等于没用）</span></div>
+    <div class="step__body">
+      <p>点扩展图标 →「打开设置」，或者右键扩展图标 →「选项」。在<strong>模型服务</strong>这一节填三项：</p>
+      <ul>
+        <li><strong>API Base URL</strong>：服务地址，要填到 <code>/v1</code> 这一层。例如 <code>https://api.openai.com/v1</code>、<code>https://api.deepseek.com/v1</code>。你的服务商文档里叫「base_url」的就是它。</li>
+        <li><strong>API Key</strong>：服务商给你的那串密钥，通常以 <code>sk-</code> 开头。</li>
+        <li><strong>模型名称</strong>：要填服务商文档里给的<em>准确</em>名字，例如 <code>gpt-4o-mini</code>、<code>deepseek-chat</code>。填错会报「模型不存在」。</li>
+      </ul>
+      <p>然后：点<strong>「测试连接」</strong> → 看到绿色的成功提示 → 点页面最下方的<strong>「保存设置」</strong> → 回到「域名授权」那一行点<strong>「授权该域名」</strong>，在浏览器弹窗里点「允许」。</p>
+      <p>最后这一步很多人会漏掉。不授权的话，请求会被浏览器直接拦下，表现为「连不上」。</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step__head"><span class="step__num">4</span><span class="step__title">去 B 站视频页用</span></div>
+    <div class="step__body">
+      <p>打开任意一个 B 站视频（网址长这样：<code>bilibili.com/video/BV...</code>），右侧信息栏会出现一个「AI 总结视频」的入口 —— 也可能藏在右上角，点一下就在下方展开面板。</p>
+      <p>面板里点<strong>「获取字幕」</strong>，有多个字幕来源时选一个，然后点<strong>「总结」</strong>。长视频会自动分段处理，进度显示在面板里。</p>
+      <p>总结出来后可以导出 Markdown、幕布大纲、字幕 txt，以及思维导图 SVG / PNG。</p>
+    </div>
+  </div>
+
+  <h2>遇到问题先看这里</h2>
+
+  <table>
+    <tr><th>现象</th><th>原因与处理</th></tr>
+    <tr>
+      <td>加载时提示「清单文件缺失或不可读取」</td>
+      <td>选错了文件夹。要选<strong>直接包含 <code>manifest.json</code> 的那一层</strong>，不是它的上一级。</td>
+    </tr>
+    <tr>
+      <td>面板能打开，但说没配置模型</td>
+      <td>第 3 步没做完。三项都填了、点了「保存设置」才算生效；「测试连接」用的是<strong>已保存</strong>的设置。</td>
+    </tr>
+    <tr>
+      <td>点「测试连接」报网络错误 / 一直转圈</td>
+      <td>九成是没点「授权该域名」。其次是 Base URL 少了 <code>/v1</code>，或者你的服务商不允许浏览器直接调用（部分服务需要开 CORS，自建服务要加允许跨域的响应头）。</td>
+    </tr>
+    <tr>
+      <td>字幕显示「未获取」</td>
+      <td>先在 B 站登录。仍不行说明这个视频本身没有公开字幕 —— 此时可以「导入本地字幕」（SRT / VTT / JSON），或在设置里启用「视觉模型」后改用画面识别。</td>
+    </tr>
+    <tr>
+      <td>这个视频的字幕被设为需要解锁</td>
+      <td>是平台限制（UP 主关闭了字幕、或视频是充电/付费专属），扩展不会绕过。换视频或改用导入字幕。</td>
+    </tr>
+    <tr>
+      <td>右侧没有「AI 总结视频」入口</td>
+      <td>确认是 <code>/video/BV...</code> 这种普通投稿页（番剧页不支持），然后刷新页面。刚装完扩展时，已打开的标签页需要刷新才会生效。</td>
+    </tr>
+    <tr>
+      <td>总结到一半报错</td>
+      <td>多半是模型服务超时或限流。设置里「等待回复的最长时间」可以调大，长视频也可以把「每段内容量」调小。</td>
+    </tr>
+    <tr>
+      <td>浏览器更新后扩展不见了 / 不工作</td>
+      <td>未上架商店的扩展在浏览器大版本更新后可能被停用。回扩展管理页重新启用；如果被移除，重新「加载已解压的扩展程序」即可，设置不会丢。</td>
+    </tr>
+  </table>
+
+  <h2>隐私</h2>
+  <div class="privacy">
+    <ul>
+      <li>API Key 只存在你本机浏览器的扩展存储里，<strong>只发给上面填的那个服务地址</strong>，不经过任何第三方中转。</li>
+      <li>不收集浏览历史、Cookie、剪贴板；没有统计、没有广告、没有远程代码。</li>
+      <li>字幕只在你点「总结」时发给你自己的模型服务；不点就不发。</li>
+      <li>总结结果缓存在本机，按视频分开存，不会上传。</li>
+      <li>本机存储不等同于系统级密钥库，共用电脑上建议用一把限额度的 Key，用完删掉。</li>
+    </ul>
+  </div>
+
+  <h2>不用了怎么删掉</h2>
+  <ol>
+    <li>扩展管理页里点「移除」</li>
+    <li>把第 1 步解压出来的文件夹删掉</li>
+    <li>如果填过 Key，建议去服务商后台把这把 Key 作废</li>
+  </ol>
+
+  <footer>
+    版本 {{VERSION}} · 非官方扩展，与哔哩哔哩无隶属关系，「B站 / 哔哩哔哩」仅用于说明适用网站。<br>
+    这是一个开发者模式扩展（未上架应用商店），安装时会看到相应提示，属于正常现象。只从你信任的人那里获取这个压缩包。
+  </footer>
+
+</main>
+</body>
+</html>

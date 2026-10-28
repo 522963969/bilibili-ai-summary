@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>视频总结插件图标 - 朱红透明底 小尺寸简化版（≤32px 用）</title>
+  <g fill="#E4472B">
+    <path d="M96 182 L236 256 L96 330 Z" stroke="#E4472B" stroke-width="20" stroke-linejoin="round"/>
+    <rect x="276" y="172" width="150" height="64" rx="32"/>
+    <rect x="276" y="276" width="94" height="64" rx="32"/>
+  </g>
+</svg>

@@ -1,0 +1,220 @@
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  background: var(--app-surface);
+}
+
+.options-page {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 28px 24px 28px;
+}
+
+.options-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+.options-header__brand {
+  width: 46px;
+  height: 46px;
+  flex: none;
+}
+
+.options-header__title {
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.options-header__subtitle {
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--app-text-muted);
+}
+
+.options-header__spacer {
+  flex: 1;
+}
+
+.settings-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.settings-section {
+  padding: 18px 20px;
+}
+
+.settings-section__header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.settings-section__title {
+  font-size: 14px;
+  font-weight: 620;
+}
+
+.settings-section__desc {
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--app-text-muted);
+}
+
+.settings-section__extra {
+  margin-left: auto;
+  flex: none;
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 18px;
+}
+
+.field-grid--three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 720px) {
+  .field-grid,
+  .field-grid--three {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.field-hint {
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--app-text-muted);
+  margin-top: -6px;
+  margin-bottom: 12px;
+}
+
+/* ---- 参数分组：把若干相关设置圈成一块，和上下单行字段区分开 ---- */
+.field-group {
+  margin-top: 4px;
+  /* 与下方「域名授权」条必须留出空隙：两者都是圆角描边框，贴在一起会看成同一个框 */
+  margin-bottom: 14px;
+  padding: 12px 14px 4px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  background: var(--el-fill-color-blank);
+}
+
+.field-group__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.field-group__title {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.field-group__hint {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+/* 「恢复推荐值」贴右，避免和标题挤在一起 */
+.field-group__head .el-button {
+  margin-left: auto;
+  flex: none;
+}
+
+/* ---- 一句话读数：把技术数值翻译成用户能直接判断的话 ---- */
+.readout {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--el-text-color-secondary);
+}
+
+.readout__value {
+  flex: none;
+  font-weight: 600;
+  color: var(--el-text-color-regular);
+}
+
+.permission-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface);
+  border: 1px dashed var(--app-border-strong);
+  margin-bottom: 4px;
+}
+
+.permission-row__pattern {
+  font-size: 12px;
+}
+
+.permission-row__status {
+  font-size: 12px;
+  color: var(--app-text-secondary);
+}
+
+.options-footer {
+  position: sticky;
+  bottom: 0;
+  margin-top: 20px;
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-radius: var(--app-radius-lg);
+  border: 1px solid var(--app-border);
+  background: var(--app-bg);
+  box-shadow: var(--app-shadow-md);
+}
+
+.options-footer__state {
+  flex: 1;
+  font-size: 12px;
+  color: var(--app-text-muted);
+}
+
+.options-footer__state strong {
+  color: var(--app-text-secondary);
+  font-weight: 600;
+}
+
+.security-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12.5px;
+  line-height: 1.9;
+  color: var(--app-text-secondary);
+}
+
+.about-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--app-text-muted);
+}

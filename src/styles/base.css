@@ -1,0 +1,172 @@
+/* 全扩展共享设计变量与基础样式（Popup / Options 共用） */
+
+:root {
+  color-scheme: light;
+
+  --app-bg: #ffffff;
+  --app-surface: #f6f7f9;
+  --app-surface-raised: #ffffff;
+  --app-border: #e7e9ee;
+  --app-border-strong: #d5d9e2;
+  --app-text: #101828;
+  --app-text-secondary: #475467;
+  --app-text-muted: #98a2b3;
+  --app-accent: #fb7299;
+  --app-accent-strong: #e23a6f;
+  --app-accent-soft: rgba(251, 114, 153, 0.12);
+  --app-success: #12b76a;
+  --app-warning: #f79009;
+  --app-danger: #f04438;
+  --app-radius-lg: 14px;
+  --app-radius-md: 10px;
+  --app-shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --app-shadow-md: 0 8px 28px rgba(16, 24, 40, 0.1);
+
+  --el-color-primary: #fb7299;
+  --el-color-primary-light-3: #fc94b2;
+  --el-color-primary-light-5: #fdb3c8;
+  --el-color-primary-light-7: #fdcfdc;
+  --el-color-primary-light-8: #fee0e8;
+  --el-color-primary-light-9: #fef1f5;
+  --el-color-primary-dark-2: #d95b7e;
+  --el-border-radius-base: 8px;
+  --el-font-size-base: 13px;
+}
+
+html.dark {
+  color-scheme: dark;
+
+  --app-bg: #14161a;
+  --app-surface: #1b1e24;
+  --app-surface-raised: #1f232b;
+  --app-border: #2a2f38;
+  --app-border-strong: #3a414d;
+  --app-text: #e8eaed;
+  --app-text-secondary: #aab3c0;
+  --app-text-muted: #7c8794;
+  --app-accent: #fb7299;
+  --app-accent-strong: #ff8fb0;
+  --app-accent-soft: rgba(251, 114, 153, 0.16);
+  --app-success: #32d583;
+  --app-warning: #fdb022;
+  --app-danger: #f97066;
+  --app-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --app-shadow-md: 0 8px 28px rgba(0, 0, 0, 0.45);
+
+  --el-bg-color: #1b1e24;
+  --el-bg-color-overlay: #1f232b;
+  --el-fill-color-blank: #1b1e24;
+
+  /* 深色主题下 Element Plus 会重新声明主题色，此处必须再次覆盖，否则按钮回退为默认蓝 */
+  --el-color-primary: #fb7299;
+  --el-color-primary-light-3: #c25b7a;
+  --el-color-primary-light-5: #8f4459;
+  --el-color-primary-light-7: #5c2c3a;
+  --el-color-primary-light-8: #45232d;
+  --el-color-primary-light-9: #2e1a20;
+  --el-color-primary-dark-2: #fc8dab;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--app-text);
+  background: var(--app-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+a {
+  color: var(--app-accent-strong);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* 通用卡片 */
+.app-card {
+  background: var(--app-surface-raised);
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-lg);
+  box-shadow: var(--app-shadow-sm);
+  padding: 12px;
+}
+
+.app-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.app-card__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--app-text-secondary);
+}
+
+.muted {
+  color: var(--app-text-muted);
+}
+
+.mono {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.tag-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+  flex: none;
+}
+
+.tag-dot--ok {
+  background: var(--app-success);
+  box-shadow: 0 0 0 3px rgba(18, 183, 106, 0.16);
+}
+
+.tag-dot--warn {
+  background: var(--app-warning);
+  box-shadow: 0 0 0 3px rgba(247, 144, 9, 0.16);
+}
+
+.tag-dot--idle {
+  background: var(--app-text-muted);
+  box-shadow: 0 0 0 3px rgba(152, 162, 179, 0.16);
+}
+
+/* Element Plus 与自定义主题的对齐 */
+.el-button {
+  font-weight: 500;
+}
+
+.el-tag {
+  border-radius: 6px;
+}
+
+.el-input__wrapper,
+.el-textarea__inner {
+  border-radius: 8px;
+}

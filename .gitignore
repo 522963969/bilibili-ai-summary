@@ -1,0 +1,15 @@
+node_modules/
+dist/
+release/
+coverage/
+.vite/
+.verify/
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.workbuddy/
+*.crx
+*.pem

@@ -1,0 +1,38 @@
+{
+  "name": "bilibili-ai-summary",
+  "private": true,
+  "version": "1.0.0",
+  "description": "B站 AI 视频总结 Chrome 扩展",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "npm run typecheck && vite build",
+    "build:only": "vite build",
+    "typecheck": "vue-tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "icons": "node scripts/sync-icons.mjs",
+    "release": "node scripts/build-release.mjs",
+    "share": "node scripts/build-share.mjs"
+  },
+  "dependencies": {
+    "@element-plus/icons-vue": "2.3.2",
+    "element-plus": "2.14.7",
+    "pinia": "3.0.4",
+    "vue": "3.5.44"
+  },
+  "devDependencies": {
+    "@crxjs/vite-plugin": "2.7.1",
+    "@types/chrome": "0.3.6",
+    "@types/node": "22.18.13",
+    "@vitejs/plugin-vue": "6.0.10",
+    "eslint": "9.39.5",
+    "eslint-plugin-vue": "10.12.0",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.72.1",
+    "vite": "6.4.5",
+    "vitest": "3.2.7",
+    "vue-tsc": "3.3.13"
+  }
+}
