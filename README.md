@@ -2,6 +2,12 @@
 
 读取 B 站视频页面的信息与字幕，调用**你自己配置的** OpenAI 兼容模型生成摘要、知识点与带时间戳的章节；没有字幕时可以改用画面识别；结果可导出 Markdown、思维导图 SVG / PNG、幕布大纲与字幕 txt。
 
+[![release](https://img.shields.io/github/v/release/522963969/bilibili-ai-summary)](https://github.com/522963969/bilibili-ai-summary/releases/latest)
+
+**不想装 Node？** 直接下载安装包就行 —— [最新版本 Releases](https://github.com/522963969/bilibili-ai-summary/releases/latest)，解压后在浏览器里「加载已解压的扩展程序」，详见 [§1.3](#13-在浏览器中加载)。包内附 `START-HERE.html` 图文说明。
+
+> 注意：Chrome / Edge 不允许直接安装 zip 或 crx，「解压 + 开发者模式加载」这三步无法省略，这是浏览器侧的限制。
+
 > **当前版本：1.0.0（正式版）**，可上架 Chrome 应用商店。
 >
 > 已实现：Manifest V3 工程、Popup、设置页、强类型消息通道、设置持久化、B 站视频识别与页面上下文采集、字幕轨道发现与下载、SRT / VTT / JSON 导入、字幕规范化与本地缓存、页面内信息栏入口与按钮下方就地展开的面板、OpenAI 兼容模型连通性测试、分块并发总结（概述 + 章节，章节可点击定位）与断点续跑；无字幕视频的画面抽帧识别（抽帧 + 视觉模型逐帧描述 + 来源标签 + 讲稿断点复用）；字幕全文展开与 txt 导出；导出 Markdown 文件与幕布大纲；**知识点卡片 + 思维导图（面板内预览，可导出 SVG / PNG）**；单块直出与章节覆盖度保护；素材指纹与错配快照拦截。
@@ -37,6 +43,8 @@ npm run build      # 先执行 vue-tsc 类型检查，再产出 dist/
 2. 右上角开启「开发者模式」。
 3. 点击「加载已解压的扩展程序」，选择本项目的 **`dist` 目录**（不是项目根目录）。
 4. 固定扩展图标到工具栏。首次安装会自动打开设置页。
+
+> **从 Releases 下载的 zip**：先解压，再在第 3 步选**解压出来的那一层**（里面直接有 `manifest.json`）。选成上一级会提示「清单文件缺失或不可读取」。解压位置不要放「下载」目录，也别事后移动——开发者模式扩展是从那个目录实时读取的，一动就失效。
 
 > **浏览器兼容性**：`minimum_chrome_version` 已降到 `100`，但部分国产 Chromium 内核浏览器（如 360 安全浏览器 16.x，内核约 108–114）对 MV3 的支持不完整，加载 `dist` 时可能仍报版本错误。请使用 Chrome / Edge / 其他完整支持 MV3 的浏览器。若报 `This extension requires Google Chrome version N or greater`，说明该浏览器的内核版本低于 `manifest.json` 中的门槛，换浏览器即可。
 
@@ -759,6 +767,7 @@ ZIP 由脚本内置的最简实现写出（deflate + CRC32，约 80 行），**�
 - **开发自测**：扩展管理页开启开发者模式 →「加载已解压的扩展程序」→ 选 `dist/`（或解压后的目录）
 - **正式分发**：把 zip 上传到 Chrome 应用商店；离线分发则解压后同上加载
 - **Edge**：同一份 `dist/` 在 `edge://extensions` 里「加载解压缩的扩展」即可，无需改造；上架则把同一个 zip 传到 Edge 加载项商店（独立后台，需另填一份表单）。详见 §1.10
+- **GitHub Releases**：`v1.0.0` 已挂上分享包，[下载页](https://github.com/522963969/bilibili-ai-summary/releases/latest) 就是「给别人的那个文件」。以后每次发版把新的 share zip 作为 asset 传上去，`/releases/latest` 会自动指向最新版。
 - **给个人分发（不上架）**：`npm run share` 生成 `release/bilibili-ai-summary-<版本>-share.zip`，里面是扩展 + `START-HERE.html` 安装说明。**发给非技术用户请用这个，不要发商店包**——商店包只有代码，对方拿到不知道该干什么，也常常把 zip 直接拖进浏览器（装不上）。
 
 两个 zip 的区别只有一点，别传错：
@@ -776,10 +785,11 @@ ZIP 由脚本内置的最简实现写出（deflate + CRC32，约 80 行），**�
 
 ### 10.4 发下一个版本
 
-改版本号 → `npm run release` → 上传。两点注意：
+改版本号 → `npm run release` → `npm run share` → 上传（商店传前者，Releases 传后者）。三点注意：
 
 - 商店要求版本号**严格递增**，脚本只校验两处一致，不替你判断是否大于线上版本
 - 用户更新后 `chrome.storage.local` 里的旧设置会保留，`normalizeSettings` 自动补齐新增字段（见 §4），不需要让用户重填
+- Releases 上的 asset 名带版本号（`bilibili-ai-summary-<版本>-share.zip`），同一个 tag 下别覆盖旧文件，否则已下载的人无法判断自己拿的是哪版
 
 ---
 
