@@ -1,4 +1,4 @@
-# B站 AI 视频总结 · Chrome 扩展
+# B站 AI 视频总结（Chrome / Edge 扩展）
 
 读取 B 站视频页面的信息与字幕，调用**你自己配置的** OpenAI 兼容模型生成摘要、知识点与带时间戳的章节；没有字幕时可以改用画面识别；结果可导出 Markdown、思维导图 SVG / PNG、幕布大纲与字幕 txt。
 
@@ -31,7 +31,7 @@ npm run build      # 先执行 vue-tsc 类型检查，再产出 dist/
 
 构建产物位于 `dist/`，即为可加载的扩展目录。不想装 Node 也可以直接取 `release/` 下的分享包（见 §10.2）。
 
-### 1.3 在 Chrome 中加载
+### 1.3 在浏览器中加载
 
 1. 打开 `chrome://extensions/`（Edge 为 `edge://extensions/`）。
 2. 右上角开启「开发者模式」。
