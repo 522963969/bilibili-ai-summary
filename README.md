@@ -8,7 +8,7 @@
 
 > 注意：Chrome / Edge 不允许直接安装 zip 或 crx，「解压 + 开发者模式加载」这三步无法省略，这是浏览器侧的限制。
 
-> **当前版本：1.0.0（正式版）**，可上架 Chrome 应用商店。
+> **当前版本：1.0.1（正式版）**，可上架 Chrome 应用商店。
 >
 > 已实现：Manifest V3 工程、Popup、设置页、强类型消息通道、设置持久化、B 站视频识别与页面上下文采集、字幕轨道发现与下载、SRT / VTT / JSON 导入、字幕规范化与本地缓存、页面内信息栏入口与按钮下方就地展开的面板、OpenAI 兼容模型连通性测试、分块并发总结（概述 + 章节，章节可点击定位）与断点续跑；无字幕视频的画面抽帧识别（抽帧 + 视觉模型逐帧描述 + 来源标签 + 讲稿断点复用）；字幕全文展开与 txt 导出；导出 Markdown 文件与幕布大纲；**知识点卡片 + 思维导图（面板内预览，可导出 SVG / PNG）**；单块直出与章节覆盖度保护；素材指纹与错配快照拦截；**结果区素材核对（视频键 / 首句原文 / 时长三重比对，对不上就告警并给出「改用平台字幕」）**。
 >
@@ -557,7 +557,7 @@ token → 字数的换算口径是**「1 个汉字约 1 token」**（与 `summar
 | 单元测试 | `npm test`（Vitest） | 20 个文件 / 255 个用例全部通过（含抽帧采样、画面讲稿解析与兜底对齐、画面识别编排与空跑防护、Markdown / 幕布 / 字幕导出、思维导图建树与布局、章节覆盖度与补问、版本与 manifest 简介一致性） |
 | ESLint | `npm run lint` | 0 问题 |
 | 生产构建 | `npm run build` | 通过，产出 `dist/`（含 `manifest.json`、`service-worker-loader.js`、popup / options / panel 三个 HTML 入口） |
-| 扩展可加载 | 以 `--load-extension=dist` 启动 Chromium 156，检查 CDP 目标列表 | Service Worker、Options 页、Content Script 与面板 iframe 均正常启动，`app.ping` 返回 `{"version":"1.0.0"}` |
+| 扩展可加载 | 以 `--load-extension=dist` 启动 Chromium 156，检查 CDP 目标列表 | Service Worker、Options 页、Content Script 与面板 iframe 均正常启动，`app.ping` 返回 `{"version":"1.0.1"}` |
 | manifest 合法性 | `--pack-extension=dist` 打包 | 打包成功。早期 WAR 的 `matches` 写成 `/video/*` 时报 `Invalid match pattern` 并导致扩展拒绝加载，改为宿主级通配后修复 |
 | 消息与存储 | 在真实扩展环境调用 `settings.update` → `settings.get` | `modelConfigured` 由 false 变为 true，`updatedAt` 写入成功；未知消息返回 `E_UNKNOWN_MESSAGE` |
 | 页面脚本 | 在真实 B 站视频页（BV1GJ411x7h7）调用 `content.collectPageContext` | 返回标题「【官方 MV】Never Gonna Give You Up - Rick Astley」、UP 主「索尼音乐中国」、时长 213 秒，标题后缀已清理 |
@@ -635,9 +635,9 @@ token → 字数的换算口径是**「1 个汉字约 1 token」**（与 `summar
 | 抽帧恢复推荐值 | 真实鼠标点「恢复推荐值」 | 四个输入框回到 `2 / 3 / 200 / 512`，按钮复归 `disabled` |
 | 交叉约束的提示文案 | 设「每段内容量」20000、「单段上限」4000 后保存 | 出现一条 `每段内容量超过单段上限，已按上限收敛`，保存后输入框显示 `4000`、落盘 `targetTokens: 4000 / maxTokens: 4000` |
 | 发布包结构完整性 | 用系统解压工具还原 `release/*.zip`，与 `dist/` 逐文件比对 | 28 个文件，文件名与字节数**逐项一致**（证明自写的 ZIP 写入器没写坏目录项） |
-| 发布包安装冒烟 | 用无头 Edge `--load-extension` 直接加载解压后的目录（全新 profile），读设置页与 Popup 的 DOM、manifest，并从设置页发起 `app.ping` | 设置页标题「B站 AI 视频总结 · 设置」、副标题「模型服务、长视频分块与界面偏好」、徽标 `v1.0.0`、三步指引三条齐全、六个分组；Popup 副标题 `v1.0.0`、功能状态 9 项「已支持」+ 1 项「暂未支持」；`app.ping` 返回 `{"ok":true,"data":{"version":"1.0.0",…}}`（已无 `stage` 字段）；两页 console **0 错误**、正文均无「开发阶段 / 阶段 N」 |
+| 发布包安装冒烟 | 用无头 Edge `--load-extension` 直接加载解压后的目录（全新 profile），读设置页与 Popup 的 DOM、manifest，并从设置页发起 `app.ping` | 设置页标题「B站 AI 视频总结 · 设置」、副标题「模型服务、长视频分块与界面偏好」、徽标 `v1.0.1`、三步指引三条齐全、六个分组；Popup 副标题 `v1.0.1`、功能状态 9 项「已支持」+ 1 项「暂未支持」；`app.ping` 返回 `{"ok":true,"data":{"version":"1.0.1",…}}`（已无 `stage` 字段）；两页 console **0 错误**、正文均无「开发阶段 / 阶段 N」 |
 | 发布包面板页可运行 | 直接打开 `chrome-extension://<id>/src/panel/index.html`，采集 Vue 挂载状态、样式表规则数与 Network 结果 | Vue 挂载成功、`.panel` 存在、样式表 **79 条规则**（CSS 确实进了包）、Network 无 4xx / `loadingFailed`、console **0 错误**；无 B 站上下文时降级为「当前标签页不是 B 站视频播放页」而非白屏或抛错 |
-| 分享包可直接交付 | `unzip` 还原 `release/*-share.zip`，比对文件哈希与结构，再把解压目录交给 Edge 加载 | 根目录 6 项（`manifest.json` / `assets` / `icons` / `src` / `service-worker-loader.js` / `START-HERE.html`），共 29 个文件；28 个扩展文件与 `dist/` **逐个 sha256 一致**；多出的说明页不影响加载，Edge 成功注册扩展；说明页 `{{VERSION}}` 已替换为 `1.0.0`、宽 900px 无横向溢出 |
+| 分享包可直接交付 | `unzip` 还原 `release/*-share.zip`，比对文件哈希与结构，再把解压目录交给 Edge 加载 | 根目录 6 项（`manifest.json` / `assets` / `icons` / `src` / `service-worker-loader.js` / `START-HERE.html`），共 29 个文件；28 个扩展文件与 `dist/` **逐个 sha256 一致**；多出的说明页不影响加载，Edge 成功注册扩展；说明页 `{{VERSION}}` 已替换为 `1.0.1`、宽 900px 无横向溢出 |
 | 发布包无开发残留 | 对解压目录做字符串扫描 | 无 `localhost:端口` / `127.0.0.1:端口`、无 `TODO` / `FIXME` / `mock-`、无 `.map`；`思维导图` 出现在面板与导出 chunk 中、`svgToPngBase64` / `toDataURL` 均存在，说明知识点与 SVG/PNG 导出链路**真的打进了包**，不是只在源码里 |
 | Edge 真实页面注入 | 无头 Edge 156 打开真实视频页（`BV1GJ411x7h7`），轮询 `#bili-ai-summary-host` 是否出现 | **2.0 秒完成注入**（脚本给了 25 秒上限，没用上）；宿主带 Shadow DOM，入口按钮量到 350×42，文字「AI 总结视频 ›」，`aria-expanded="false"`，且视频元素已就绪（640×360） |
 | Edge 真实页面打开面板 | 同一页面上用 CDP 发真实鼠标事件点入口，再从目标列表连进面板进程读 DOM | `aria-expanded` 变 `true`；iframe `src` 为 `chrome-extension://<id>/src/panel/index.html?tabId=25463639&videoKey=BV1GJ411x7h7%23p1`，尺寸 348×638；面板已挂载，识别出「【官方 MV】Never Gonna Give You Up - Rick Astley / UP 主：索尼音乐中国 / 时长 3:33」，字幕如实显示「未获取」（未登录） |
@@ -778,15 +778,15 @@ ZIP 由脚本内置的最简实现写出（deflate + CRC32，约 80 行），**�
 - **开发自测**：扩展管理页开启开发者模式 →「加载已解压的扩展程序」→ 选 `dist/`（或解压后的目录）
 - **正式分发**：把 zip 上传到 Chrome 应用商店；离线分发则解压后同上加载
 - **Edge**：同一份 `dist/` 在 `edge://extensions` 里「加载解压缩的扩展」即可，无需改造；上架则把同一个 zip 传到 Edge 加载项商店（独立后台，需另填一份表单）。详见 §1.10
-- **GitHub Releases**：`v1.0.0` 已挂上分享包，[下载页](https://github.com/522963969/bilibili-ai-summary/releases/latest) 就是「给别人的那个文件」。以后每次发版把新的 share zip 作为 asset 传上去，`/releases/latest` 会自动指向最新版。
+- **GitHub Releases**：`v1.0.1` 已挂上两个 zip（分享包 + 商店包），[下载页](https://github.com/522963969/bilibili-ai-summary/releases/latest) 就是「给别人的那个文件」。以后每次发版把新的 share zip 作为 asset 传上去，`/releases/latest` 会自动指向最新版。
 - **给个人分发（不上架）**：`npm run share` 生成 `release/bilibili-ai-summary-<版本>-share.zip`，里面是扩展 + `START-HERE.html` 安装说明。**发给非技术用户请用这个，不要发商店包**——商店包只有代码，对方拿到不知道该干什么，也常常把 zip 直接拖进浏览器（装不上）。
 
 两个 zip 的区别只有一点，别传错：
 
 | 文件 | 内容 | 给谁 |
 | --- | --- | --- |
-| `bilibili-ai-summary-1.0.0.zip` | 28 个文件，扩展本体在 zip 根 | 提交 Chrome / Edge 应用商店 |
-| `bilibili-ai-summary-1.0.0-share.zip` | 同上 28 个文件 + `START-HERE.html`，仍在同一层 | 直接发给个人，解压后加载那一层
+| `bilibili-ai-summary-1.0.1.zip` | 28 个文件，扩展本体在 zip 根 | 提交 Chrome / Edge 应用商店 |
+| `bilibili-ai-summary-1.0.1-share.zip` | 同上 28 个文件 + `START-HERE.html`，仍在同一层 | 直接发给个人，解压后加载那一层
 
 ### 10.3 上架清单
 

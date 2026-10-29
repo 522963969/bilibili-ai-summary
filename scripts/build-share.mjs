@@ -6,7 +6,7 @@
  *   - release/*-share.zip 扩展本体 + START-HERE.html，直接发给个人用
  *
  * 结构刻意做成「解压出来的那一层就是扩展目录」：
- *   bilibili-ai-summary-1.0.0/
+ *   bilibili-ai-summary-<version>/
  *     START-HERE.html      ← 双击看说明
  *     manifest.json        ← 这一层直接「加载已解压的扩展程序」
  *     assets/ icons/ src/ service-worker-loader.js
