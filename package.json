@@ -1,7 +1,7 @@
 {
   "name": "bilibili-ai-summary",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "B站 AI 视频总结 Chrome 扩展",
   "type": "module",
   "scripts": {

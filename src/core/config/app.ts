@@ -17,7 +17,7 @@ export const APP_DESCRIPTION =
  * 版本号的唯一来源是 package.json，这里必须与之一致。
  * tests/app-meta.test.ts 会断言两者相等，避免发版时漏改一处。
  */
-export const APP_VERSION = '1.0.1';
+export const APP_VERSION = '1.0.2';
 
 export const BILIBILI_ORIGIN = 'https://www.bilibili.com';
 

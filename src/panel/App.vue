@@ -14,7 +14,14 @@ import {
   type CurrentMaterial,
   type MaterialIssue
 } from '@/core/summary/material-consistency';
-import type { NormalizedSubtitle, SubtitleDiscovery } from '@/core/subtitle/types';
+import {
+  TRACK_COVERAGE,
+  buildCoverageHint,
+  listFetchableTracks,
+  measureSubtitleCoverage,
+  pickDefaultTrack
+} from '@/core/subtitle/track-choice';
+import type { NormalizedSubtitle, SubtitleDiscovery, SubtitleTrack } from '@/core/subtitle/types';
 import { SUMMARY_SOURCE_LABELS, type SummaryTaskSnapshot } from '@/core/summary/types';
 import type { ResolvedVideo } from '@/core/video/types';
 import { svgToPngBase64 } from './svg-to-png';
@@ -37,6 +44,8 @@ const loadingVideo = ref(true);
 
 const subtitle = ref<NormalizedSubtitle | null>(null);
 const discovery = ref<SubtitleDiscovery | null>(null);
+/** 当前字幕来自哪条轨道。换轨道后要能高亮出选中的那条。 */
+const selectedTrackId = ref<string | null>(null);
 const subtitleBusy = ref<'idle' | 'discover' | 'fetch' | 'import'>('idle');
 const subtitleError = ref<string | null>(null);
 const subtitleNotice = ref<string | null>(null);
@@ -180,6 +189,25 @@ const subtitleSummaryText = computed(() => {
   return `已获取 ${current.stats.cueCount} 条 · ${seconds} 秒`;
 });
 const hasFrameScript = computed(() => (frameScript.value?.entries.length ?? 0) > 0);
+/** 视频时长（秒），用于判断字幕覆盖得够不够。 */
+const videoDurationSeconds = computed(() => video.value?.pageContext?.durationSeconds ?? null);
+/** 可获取的轨道；多于一条才需要给用户选择入口。 */
+const usableTracks = computed<SubtitleTrack[]>(() => listFetchableTracks(discovery.value?.tracks ?? []));
+/**
+ * 字幕覆盖率。只有「条数太少」或「覆盖不到视频的 30%」才判为不够用。
+ *
+ * 面板此前只显示「1 条 · 10 秒」这种裸数字，看不出它和 24 分钟的视频完全不匹配；
+ * 这里把两个数字放在一起比较，直接把结论说出来。
+ */
+const subtitleCoverage = computed(() =>
+  subtitle.value ? measureSubtitleCoverage(subtitle.value.stats, videoDurationSeconds.value) : null
+);
+const coverageHint = computed(() => {
+  const current = subtitle.value;
+  const coverage = subtitleCoverage.value;
+  if (!current || !coverage) return null;
+  return buildCoverageHint(coverage, current.stats, videoDurationSeconds.value);
+});
 /**
  * 任务总耗时（含抽帧）。
  * 模型的 elapsedMs 只覆盖分块与归并，画面识别还有几十秒抽帧时间，
@@ -266,6 +294,7 @@ async function loadSubtitle(): Promise<void> {
   try {
     const result = await messageClient.send('subtitle.getCached', { videoKey: key });
     subtitle.value = result.subtitle;
+    if (result.subtitle) selectedTrackId.value = result.subtitle.trackId;
   } catch (error) {
     reportError(subtitleError, error);
   }
@@ -573,6 +602,13 @@ async function copyToMubu(): Promise<void> {
   }
 }
 
+/**
+ * 获取字幕：先看有哪些轨道，再挑一条，必要时自动换到覆盖更全的那条。
+ *
+ * 为什么不能只取第一条：`player/v2` 对一个视频可能返回多条轨道（自动生成、机翻、
+ * UP 主上传），第一条不一定是能用的那条。实测见过只有 1 条、10 秒的占位字幕，
+ * 24 分钟的视频拿到的却是它。这里按覆盖率试着往下换，并把最终用的是哪条说清楚。
+ */
 async function discoverAndFetch(): Promise<void> {
   const id = tabId.value;
   if (id === null) {
@@ -581,16 +617,71 @@ async function discoverAndFetch(): Promise<void> {
   }
   subtitleBusy.value = 'discover';
   subtitleError.value = null;
+  subtitleNotice.value = null;
   try {
     const found = await messageClient.send('subtitle.discover', { tabId: id });
     discovery.value = found;
-    const track = found.tracks.find((item) => !item.locked && item.url);
-    if (!track) {
+
+    const primary = pickDefaultTrack(found.tracks);
+    if (!primary) {
       subtitleError.value = found.message;
       return;
     }
-    subtitleBusy.value = 'fetch';
-    subtitle.value = await messageClient.send('subtitle.fetch', { tabId: id, trackId: track.id });
+
+    const order = [primary, ...listFetchableTracks(found.tracks).filter((item) => item.id !== primary.id)];
+    const attempts = order.slice(0, TRACK_COVERAGE.maxAutoAttempts);
+    const triedLabels: string[] = [];
+    let best: NormalizedSubtitle | null = null;
+    let lastTrackId: string | null = null;
+
+    for (const track of attempts) {
+      subtitleBusy.value = 'fetch';
+      const doc = await messageClient.send('subtitle.fetch', { tabId: id, trackId: track.id });
+      triedLabels.push(track.label);
+      lastTrackId = track.id;
+      if (!best || doc.stats.totalDurationMs > best.stats.totalDurationMs) best = doc;
+      // 这条已经够用就不再拉别的，避免为了「最优」多打好几次请求
+      if (!measureSubtitleCoverage(doc.stats, videoDurationSeconds.value).insufficient) break;
+    }
+
+    if (!best) {
+      subtitleError.value = '字幕轨道都没有返回内容，请稍后重试或导入本地字幕';
+      return;
+    }
+
+    /**
+     * 缓存里留下的是最后一次拉到的轨道，界面要显示「最好的那条」时得把它再拉一次，
+     * 否则会出现「界面显示 A，下次打开面板变成 B」这种自相矛盾。
+     */
+    if (best.trackId !== lastTrackId) {
+      subtitleBusy.value = 'fetch';
+      best = await messageClient.send('subtitle.fetch', { tabId: id, trackId: best.trackId });
+    }
+
+    subtitle.value = best;
+    selectedTrackId.value = best.trackId;
+    if (triedLabels.length > 1) {
+      subtitleNotice.value = `自动选用了「${best.label}」：其余 ${triedLabels.length - 1} 条轨道覆盖更短`;
+    }
+  } catch (error) {
+    reportError(subtitleError, error);
+  } finally {
+    subtitleBusy.value = 'idle';
+  }
+}
+
+/** 手动换轨道。用户明确选择时不再做任何自动判断。 */
+async function switchTrack(trackId: string): Promise<void> {
+  const id = tabId.value;
+  if (id === null || trackId === selectedTrackId.value) return;
+  subtitleBusy.value = 'fetch';
+  subtitleError.value = null;
+  subtitleNotice.value = null;
+  try {
+    subtitle.value = await messageClient.send('subtitle.fetch', { tabId: id, trackId });
+    selectedTrackId.value = trackId;
+    const label = usableTracks.value.find((item) => item.id === trackId)?.label ?? '所选轨道';
+    subtitleNotice.value = `已切换到「${label}」`;
   } catch (error) {
     reportError(subtitleError, error);
   } finally {
@@ -618,13 +709,17 @@ async function onFileChange(event: Event): Promise<void> {
   }
   subtitleBusy.value = 'import';
   subtitleError.value = null;
+  subtitleNotice.value = null;
   try {
     const content = await file.text();
-    subtitle.value = await messageClient.send('subtitle.import', {
+    const imported = await messageClient.send('subtitle.import', {
       tabId: id,
       fileName: file.name,
       content
     });
+    subtitle.value = imported;
+    // 导入的文件不属于任何平台轨道，清掉选中态，避免轨道条里还高亮着上一条
+    selectedTrackId.value = null;
   } catch (error) {
     reportError(subtitleError, error);
   } finally {
@@ -766,7 +861,37 @@ onBeforeUnmount(() => {
             <span>·</span>
             <span>{{ Math.round(subtitle.stats.totalDurationMs / 1000) }} 秒</span>
             <span>·</span>
-            <span>{{ subtitle.source === 'import' ? '本地导入' : 'B 站' }}</span>
+            <span>{{ subtitle.source === 'import' ? '本地导入' : subtitle.label }}</span>
+          </div>
+
+          <!-- 轨道选择：多于一条可用轨道时才出现，让用户能换掉占位/残缺的那条 -->
+          <div v-if="usableTracks.length > 1" class="tracks">
+            <span class="tracks__label">字幕轨道 {{ usableTracks.length }} 条</span>
+            <button
+              v-for="track in usableTracks"
+              :key="track.id"
+              class="track"
+              :class="{ 'track--on': track.id === selectedTrackId }"
+              type="button"
+              :disabled="subtitleBusy !== 'idle'"
+              :title="track.isAiGenerated ? `${track.label}（平台自动生成）` : track.label"
+              @click="switchTrack(track.id)"
+            >
+              {{ track.label }}<span v-if="track.isAiGenerated" class="track__ai">AI</span>
+            </button>
+          </div>
+
+          <!-- 覆盖率不足时给出可执行的动作：重新读轨道列表并自动挑覆盖最全的一条 -->
+          <div v-if="coverageHint" class="coverage">
+            <p class="hint hint--warn">{{ coverageHint }}</p>
+            <button
+              class="link-btn"
+              type="button"
+              :disabled="subtitleBusy !== 'idle'"
+              @click="discoverAndFetch"
+            >
+              {{ subtitleBusy === 'idle' ? '重新读取轨道并自动挑选' : '处理中…' }}
+            </button>
           </div>
           <ul class="cues" :class="{ 'cues--full': subtitleExpanded }">
             <li v-for="cue in visibleCues" :key="cue.index" class="cues__item">
@@ -1144,6 +1269,83 @@ onBeforeUnmount(() => {
 .meta--actions {
   align-items: center;
   gap: 8px;
+}
+
+/*
+ * 字幕轨道选择。
+ * 面板只有 350px 宽，轨道名长短不一，所以用可换行的 chip 而不是下拉框——
+ * 下拉框要点击展开才知道有几条，而这里「有几条轨道」本身就是需要被看见的信息。
+ */
+.tracks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.tracks__label {
+  flex: none;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.track {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 100%;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--bg);
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1.5;
+  cursor: pointer;
+  transition: border-color 0.18s, color 0.18s, background 0.18s;
+}
+
+.track:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.track:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* 选中态用强调色实心，和旁边未选中的描边 chip 一眼能分开 */
+.track--on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.track--on:disabled {
+  opacity: 1;
+}
+
+.track__ai {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  opacity: 0.75;
+}
+
+/* 覆盖率提示 + 紧随其后的动作按钮：结论在上、动作在下，避免按钮挤进正文句子 */
+.coverage {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.coverage .hint {
+  margin-top: 8px;
 }
 
 .link-btn {

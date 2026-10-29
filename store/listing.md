@@ -1,4 +1,4 @@
-# Chrome 应用商店上架材料 · v1.0.1
+# Chrome 应用商店上架材料 · v1.0.2
 
 > 这份文件是「填表用的底稿」，不需要打包进扩展。
 > 上传时按小节复制到开发者后台对应字段即可。
@@ -23,7 +23,7 @@
 | 简短说明（≤132 字符） | 在 B 站视频页读取字幕，用你自己的 OpenAI 兼容模型生成摘要、知识点与章节，导出思维导图 SVG / PNG 与 Markdown；没有字幕时可按画面识别。 |
 | 类别 | 工具（Tools） |
 | 语言 | 中文（简体） |
-| 版本 | 1.0.1 |
+| 版本 | 1.0.2 |
 | 开发者网站 | https://github.com/522963969/bilibili-ai-summary |
 | 支持邮箱 | 522963969@qq.com |
 
@@ -104,7 +104,7 @@
 
 ## 6. 提交流程
 
-1. `npm run release`，产出 `release/bilibili-ai-summary-1.0.1.zip`
+1. `npm run release`，产出 `release/bilibili-ai-summary-1.0.2.zip`
 2. 打开 [Chrome Web Store 开发者后台](https://chrome.google.com/webstore/devconsole)，首次需支付一次性 5 美元注册费
 3. 新建项目 → 上传 zip
 4. 逐项填写第 1–4 节内容，上传第 5 节图片
