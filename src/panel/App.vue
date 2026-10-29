@@ -9,6 +9,11 @@ import type { ExportContext } from '@/core/export/types';
 import type { FrameScriptDocument } from '@/core/frames/types';
 import { messageClient } from '@/core/messaging/client';
 import { toSvgDataUrl } from '@/core/mindmap/svg';
+import {
+  checkMaterialConsistency,
+  type CurrentMaterial,
+  type MaterialIssue
+} from '@/core/summary/material-consistency';
 import type { NormalizedSubtitle, SubtitleDiscovery } from '@/core/subtitle/types';
 import { SUMMARY_SOURCE_LABELS, type SummaryTaskSnapshot } from '@/core/summary/types';
 import type { ResolvedVideo } from '@/core/video/types';
@@ -107,11 +112,57 @@ const materialNote = computed(() => {
   const result = task.value?.result;
   const material = result?.material;
   if (!material) return null;
+  const parts: string[] = [];
+  const origin = materialSourceText.value;
+  if (origin) parts.push(`素材 ${origin}`);
   const range = `${clock(material.startMs)}–${clock(material.endMs)}`;
   const unit = result?.source === 'frames' ? '条画面描述' : '条字幕';
-  const first = material.firstText ? ` · 首条「${material.firstText}${material.firstText.length >= 40 ? '…' : ''}」` : '';
-  return `依据 ${material.cueCount} ${unit} · ${range}${first}`;
+  parts.push(`依据 ${material.cueCount} ${unit} · ${range}`);
+  if (material.firstText) {
+    const tail = material.firstText.length >= 40 ? '…' : '';
+    parts.push(`首条「${material.firstText}${tail}」`);
+  }
+  return parts.join(' · ');
 });
+/**
+ * 素材来源：必须与结果贴在一起展示，而不是只写在字幕卡片上。
+ *
+ * 「本地导入」这个信息在结果区完全不可见时，用户看到一份跑题的总结会以为是模型的问题，
+ * 实际是他自己导入了别的视频的字幕文件。把它放到「依据 N 条字幕」旁边，一眼就能对上。
+ */
+const materialSourceText = computed(() => {
+  const current = subtitle.value;
+  if (!current) return null;
+  if (current.source === 'import') {
+    return current.importedFileName ? `本地导入「${current.importedFileName}」` : '本地导入';
+  }
+  return current.label ? `B 站字幕「${current.label}」` : 'B 站字幕';
+});
+/** 当前字幕的可核对特征，供一致性校验使用；未加载时为 null。 */
+const currentMaterial = computed<CurrentMaterial | null>(() => {
+  const current = subtitle.value;
+  if (!current) return null;
+  return {
+    source: current.source,
+    cueCount: current.stats.cueCount,
+    totalDurationMs: current.stats.totalDurationMs,
+    importedFileName: current.importedFileName,
+    texts: current.cues.map((cue) => cue.text)
+  };
+});
+/** 结果与当前素材是否对得上；对不上就明确报出来，而不是照单渲染。 */
+const materialIssues = computed<MaterialIssue[]>(() => {
+  const result = task.value?.result;
+  if (!result || taskOwnerMismatch.value) return [];
+  return checkMaterialConsistency({
+    material: result.material,
+    currentVideoKey: videoKey.value,
+    source: result.source,
+    current: currentMaterial.value,
+    videoDurationSeconds: video.value?.pageContext?.durationSeconds ?? null
+  });
+});
+const hasMaterialError = computed(() => materialIssues.value.some((issue) => issue.level === 'error'));
 const progressPercent = computed(() => {
   const current = task.value;
   if (!current || current.totalChunks <= 0) return 0;
@@ -840,6 +891,29 @@ onBeforeUnmount(() => {
         </p>
 
         <div v-if="task?.result && !taskOwnerMismatch" class="result">
+          <div v-if="materialIssues.length > 0" class="checks">
+            <div
+              v-for="issue in materialIssues"
+              :key="issue.kind"
+              class="checks__item"
+              :class="`checks__item--${issue.level}`"
+            >
+              <span class="checks__text">{{ issue.message }}</span>
+              <button
+                v-if="issue.action === 'refetch-subtitle'"
+                class="link-btn"
+                type="button"
+                :disabled="subtitleBusy !== 'idle'"
+                @click="discoverAndFetch"
+              >
+                {{ subtitleBusy === 'idle' ? '改用平台字幕' : '获取中…' }}
+              </button>
+            </div>
+            <p v-if="hasMaterialError" class="checks__foot">
+              核对不通过说明这份总结依据的不是当前视频的字幕。换回平台字幕后请点「重新生成总结」。
+            </p>
+          </div>
+
           <p class="result__overview">{{ task.result.overview }}</p>
 
           <div v-if="task.result.highlights.length > 0" class="block">
@@ -1288,6 +1362,67 @@ onBeforeUnmount(() => {
   font-size: 12.5px;
   line-height: 1.75;
   color: var(--text-2);
+}
+
+/*
+ * 素材核对结果。放在概述之前：读者先知道「这份东西能不能信」，再读内容。
+ * 错误用红色、提示用中性色，避免把「导入文件」这种正常选择也渲染成故障。
+ */
+.checks {
+  margin: 0 0 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.checks__item {
+  display: flex;
+  /*
+   * 按钮放到正文下方而不是同一行。
+   * 面板只有 350px 宽，并排时正文列只剩 200 出头，一句 40 字的话会被按钮挤成
+   * 「…，这｜份字幕不可能是…」这种断在半句的排版，读起来像是句子被切开。
+   */
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  padding: 7px 9px;
+  border-radius: 7px;
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.checks__item--error {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+}
+
+.checks__item--warn {
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  color: var(--warn);
+}
+
+.checks__item--info {
+  background: var(--bg-soft);
+  color: var(--muted);
+}
+
+.checks__text {
+  min-width: 0;
+}
+
+/* 动作按钮跟随提示色，不额外引入第三种颜色 */
+.checks__item .link-btn {
+  align-self: flex-end;
+  color: inherit;
+  font-size: 11.5px;
+  text-decoration: underline;
+}
+
+.checks__foot {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--muted);
 }
 
 .block {
