@@ -19,15 +19,10 @@ const PANEL_PATH = 'src/panel/index.html';
 const PANEL_HEIGHT = 640;
 const PANEL_MIN_HEIGHT = 380;
 const PANEL_VIEWPORT_RESERVE = 150;
+/** 浮层吸顶时与页头（B 站顶部导航 64px）保持的距离。 */
+const HEADER_CLEARANCE = 76;
 
 /** 右侧信息栏候选容器，按优先级从「最贴近用户预期位置」到兜底排列。 */
-const PANEL_SELECTORS = [
-  '.up-panel-container',
-  '#viewbox_report',
-  '.video-info-container',
-  '.video-desc-container',
-  '#arc_toolbar_report'
-];
 
 let host: HTMLDivElement | null = null;
 let shadow: ShadowRoot | null = null;
@@ -130,24 +125,71 @@ const STYLE = `
   }
 `;
 
-function findAnchor(): Element | null {
-  for (const selector of PANEL_SELECTORS) {
-    const element = document.querySelector(selector);
-    if (element) return element;
+/**
+ * 把浮层对齐到右栏：横向贴住视频信息栏，纵向吸顶在页头下方。
+ *
+ * 入口不再参与页面布局（插在 Vue 管理的容器里会破坏评论区），所以位置要自己算：
+ * 右栏还在视口内时与它顶部对齐，滚过去之后固定在页头下方，
+ * 否则浮层会跟着页面滚出屏幕。
+ */
+function syncHostPosition(): void {
+  if (!host) return;
+  const anchor =
+    document.querySelector('.up-panel-container') ??
+    document.querySelector('.right-container-inner') ??
+    document.querySelector('.right-container');
+
+  if (!anchor) {
+    host.style.left = 'auto';
+    host.style.right = '20px';
+    host.style.top = `${HEADER_CLEARANCE}px`;
+    return;
   }
-  return null;
+
+  const rect = anchor.getBoundingClientRect();
+  const width = Math.round(rect.width);
+  const usableWidth = width >= 280 ? Math.min(width, 352) : 350;
+  const top = Math.max(HEADER_CLEARANCE, Math.round(rect.top));
+
+  host.style.right = 'auto';
+  host.style.width = `${usableWidth}px`;
+  host.style.left = `${Math.round(rect.left)}px`;
+  host.style.top = `${top}px`;
 }
 
-/** 面板高度取「目标高度」与「视口可用高度」的较小值，避免小窗口下超出屏幕。 */
+let syncPending = false;
+
+/** 滚动/尺寸变化高频触发，用 rAF 合并成每帧最多一次布局读取。 */
+function scheduleSync(): void {
+  if (syncPending) return;
+  syncPending = true;
+  requestAnimationFrame(() => {
+    syncPending = false;
+    syncHostPosition();
+  });
+}
+
+/** 面板高度取「目标高度」与「浮层下方可用高度」的较小值，避免超出屏幕。 */
 function computePanelHeight(): number {
-  const available = window.innerHeight - PANEL_VIEWPORT_RESERVE;
+  const top = host ? Number.parseInt(host.style.top, 10) || HEADER_CLEARANCE : HEADER_CLEARANCE;
+  const available = window.innerHeight - top - PANEL_VIEWPORT_RESERVE;
   return Math.max(PANEL_MIN_HEIGHT, Math.min(PANEL_HEIGHT, available));
 }
 
 function buildHost(): void {
   host = document.createElement('div');
   host.id = HOST_ID;
-  host.style.cssText = 'display:block;width:100%;';
+  /**
+   * 必须挂在 body 上、用固定定位，不能插进 B 站的右栏容器。
+   *
+   * 实测（Edge 156，同一视频页各跑 3 次）：把入口插进 .right-container-inner 之后，
+   * 该页面懒加载的评论组件 bili-comments 3/3 次都没有被创建，#commentapp 变成空节点，
+   * 页面还多抛一条 Vue 的 HierarchyRequestError；不装扩展时 3/3 次评论组件都在。
+   * 原因是右栏整棵子树由 #app 这一个 Vue 实例渲染，往里插外来节点会打乱它的
+   * 子节点 diff，后续组件挂载随之失败。改成 body + fixed 之后评论区恢复。
+   */
+  host.style.cssText =
+    'position:fixed;left:auto;right:20px;top:88px;width:350px;z-index:2147483000;display:block;';
   shadow = host.attachShadow({ mode: 'open' });
 
   const style = document.createElement('style');
@@ -225,8 +267,8 @@ function setDrawerOpen(open: boolean): void {
     if (iframe.src !== nextUrl) iframe.src = nextUrl;
     applyExpandHeight(computePanelHeight());
     expandBox.dataset.open = 'true';
-    // 展开后确保入口与面板都在视野内（右侧栏本身可滚动）
-    host?.scrollIntoView({ block: 'nearest' });
+    // 浮层不参与页面布局，展开后只需确认位置仍然贴着右栏
+    scheduleSync();
   } else {
     applyExpandHeight(0);
     expandBox.dataset.open = 'false';
@@ -271,9 +313,8 @@ async function mount(): Promise<void> {
   }
 
   if (!host) buildHost();
-  const anchor = findAnchor();
-  if (!host || !anchor) return;
-  anchor.insertAdjacentElement('afterend', host);
+  if (!host) return;
+  document.body.appendChild(host);
 }
 
 function unmount(): void {
@@ -310,6 +351,7 @@ function onMessage(event: MessageEvent): void {
 
 /** 窗口尺寸变化时同步展开高度，避免小窗口下面板超出可视区域。 */
 function onResize(): void {
+  scheduleSync();
   if (drawerOpen) applyExpandHeight(computePanelHeight());
 }
 
@@ -333,10 +375,12 @@ export async function openPanel(): Promise<OpenPanelResult> {
 }
 
 export function startEntry(): void {
-  void mount();
+  void mount().then(() => scheduleSync());
   window.addEventListener('message', onMessage);
   window.addEventListener('resize', onResize);
   document.addEventListener('visibilitychange', onVisibilityChange);
+  // capture: true 才能收到右栏这类内部滚动容器的 scroll
+  window.addEventListener('scroll', scheduleSync, { capture: true, passive: true });
 
   // SPA 路由变化：URL 变了就重建入口与面板地址；
   // 未变化但宿主节点被 B 站重建掉时也要补回去。
@@ -351,7 +395,7 @@ export function startEntry(): void {
         }
         // 换视频后 iframe 里的 tabId / videoKey 已过期，强制重载面板
         if (drawerOpen && iframe) iframe.src = panelUrl();
-        void mount();
+        void mount().then(() => scheduleSync());
       });
       return;
     }
