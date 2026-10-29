@@ -26,6 +26,13 @@ const DISCOVERY_TTL_MS = 2 * 60 * 1000;
 interface VideoMeta {
   cid: number;
   title: string;
+  /**
+   * 这一分P 的时长（秒），来自 `pages[].duration`。
+   *
+   * 不能用 `view.duration`：多P视频那里是各P 之和，拿它跟页面正在播放的那一 P
+   * 的时长对账必然对不上，会把正常视频误判成「不是同一个视频」。
+   */
+  durationSeconds: number | null;
   expiresAt: number;
 }
 
@@ -165,6 +172,7 @@ export class BilibiliSubtitleProvider implements SubtitleProvider {
         const fallback: VideoMeta = {
           cid: topLevelCid,
           title: view.title,
+          durationSeconds: Number.isFinite(view.duration) ? view.duration : null,
           expiresAt: Date.now() + CID_TTL_MS
         };
         this.videoCache.set(identity.key, fallback);
@@ -191,6 +199,7 @@ export class BilibiliSubtitleProvider implements SubtitleProvider {
     const meta: VideoMeta = {
       cid: matched.cid,
       title: view.title,
+      durationSeconds: Number.isFinite(matched.duration) ? matched.duration : null,
       expiresAt: Date.now() + CID_TTL_MS
     };
     this.videoCache.set(identity.key, meta);
@@ -255,6 +264,7 @@ export class BilibiliSubtitleProvider implements SubtitleProvider {
       loginRequired: needsLoginForUrl || loginBlocked,
       cid: video.cid,
       videoTitle: video.title,
+      videoDurationSeconds: video.durationSeconds,
       fetchedAt: Date.now()
     };
   }

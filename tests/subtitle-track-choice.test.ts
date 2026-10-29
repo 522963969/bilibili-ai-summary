@@ -3,6 +3,7 @@ import {
   TRACK_COVERAGE,
   buildCoverageHint,
   isFetchableTrack,
+  isUsableCoverage,
   listFetchableTracks,
   measureSubtitleCoverage,
   pickDefaultTrack
@@ -109,6 +110,44 @@ describe('measureSubtitleCoverage', () => {
   it('拿不到视频时长时只在条数极少时判定', () => {
     expect(measureSubtitleCoverage({ cueCount: 1, totalDurationMs: 1000 }, null).insufficient).toBe(true);
     expect(measureSubtitleCoverage({ cueCount: 50, totalDurationMs: 600_000 }, null).insufficient).toBe(false);
+  });
+});
+
+/**
+ * 真实反馈：3:04 的视频取回 176 条、6:32 的字幕，内容是另一支视频。
+ * 字幕比视频还长，只可能是别处的素材——这种轨道必须直接弃用，不能拿来总结。
+ */
+describe('字幕超出视频时长', () => {
+  const videoSeconds = 184;
+  const overflowStats = { cueCount: 176, totalDurationMs: 392_000 };
+
+  it('字幕明显比视频长时判定为 too-long 且不可用', () => {
+    const coverage = measureSubtitleCoverage(overflowStats, videoSeconds);
+    expect(coverage.reason).toBe('too-long');
+    expect(coverage.overflows).toBe(true);
+    expect(coverage.insufficient).toBe(false);
+    expect(isUsableCoverage(coverage)).toBe(false);
+    expect(coverage.ratio).toBeCloseTo(2.130, 3);
+  });
+
+  it('片尾字幕略微拖过视频结束不算超标', () => {
+    const coverage = measureSubtitleCoverage({ cueCount: 60, totalDurationMs: 190_000 }, videoSeconds);
+    expect(coverage.overflows).toBe(false);
+    expect(isUsableCoverage(coverage)).toBe(true);
+    expect(TRACK_COVERAGE.maxRatio).toBe(1.15);
+  });
+
+  it('超出时直接说清楚「这条字幕不是这个视频的」', () => {
+    const coverage = measureSubtitleCoverage(overflowStats, videoSeconds);
+    const hint = buildCoverageHint(coverage, overflowStats, videoSeconds);
+    expect(hint).toContain('06:32');
+    expect(hint).toContain('03:04');
+    expect(hint).toContain('重新识别当前视频');
+  });
+
+  it('时长未知或视频太短时不做超出判定', () => {
+    expect(measureSubtitleCoverage(overflowStats, null).overflows).toBe(false);
+    expect(measureSubtitleCoverage(overflowStats, 90).overflows).toBe(false);
   });
 });
 

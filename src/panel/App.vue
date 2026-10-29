@@ -17,12 +17,15 @@ import {
 import {
   TRACK_COVERAGE,
   buildCoverageHint,
+  isUsableCoverage,
   listFetchableTracks,
   measureSubtitleCoverage,
-  pickDefaultTrack
+  pickDefaultTrack,
+  type SubtitleCoverage
 } from '@/core/subtitle/track-choice';
 import type { NormalizedSubtitle, SubtitleDiscovery, SubtitleTrack } from '@/core/subtitle/types';
 import { SUMMARY_SOURCE_LABELS, type SummaryTaskSnapshot } from '@/core/summary/types';
+import { checkVideoIdentity, type IdentityVerdict } from '@/core/video/identity-match';
 import type { ResolvedVideo } from '@/core/video/types';
 import { svgToPngBase64 } from './svg-to-png';
 
@@ -53,6 +56,10 @@ const subtitleNotice = ref<string | null>(null);
 const task = ref<SummaryTaskSnapshot | null>(null);
 const summaryBusy = ref(false);
 const summaryError = ref<string | null>(null);
+
+/** 重新识别当前视频的忙碌态与结果提示。 */
+const identityBusy = ref(false);
+const identityNotice = ref<string | null>(null);
 
 /** 视觉模型是否可用；不可用时不渲染画面识别按钮，避免出现点了没反应的入口。 */
 const visionConfigured = ref(false);
@@ -209,6 +216,24 @@ const coverageHint = computed(() => {
   return buildCoverageHint(coverage, current.stats, videoDurationSeconds.value);
 });
 /**
+ * 面板认的视频 vs 页面正在播的视频。
+ *
+ * 两个来源彼此独立：接口侧时长来自 `player/v2` 之前的 `view`（按地址里的 bvid 取），
+ * 页面侧时长来自 `<video>.duration`（DOM）。B 站切视频是 SPA，地址与 DOM 会有一两秒
+ * 不同步，面板偏偏可能在这个窗口里挂载——于是「3 分钟的视频」配上「6 分半的字幕」，
+ * 内容完全是另一支视频。这里把两边摆在一起对账，对不上就说出来。
+ */
+const identityVerdict = computed<IdentityVerdict>(() => {
+  const found = discovery.value;
+  const context = video.value?.pageContext ?? null;
+  if (!found && !context) return { kind: 'unknown', basis: null, message: null };
+  return checkVideoIdentity(
+    { title: found?.videoTitle ?? null, durationSeconds: found?.videoDurationSeconds ?? null },
+    { title: context?.title ?? null, durationSeconds: context?.durationSeconds ?? null }
+  );
+});
+const identityMismatch = computed(() => identityVerdict.value.kind === 'mismatch');
+/**
  * 任务总耗时（含抽帧）。
  * 模型的 elapsedMs 只覆盖分块与归并，画面识别还有几十秒抽帧时间，
  * 用快照的时间区间才不会让用户以为「70 帧画面只花了 15 秒就识别完」。
@@ -266,6 +291,42 @@ function clock(ms: number): string {
 function reportError(target: typeof videoError, error: unknown): void {
   const appError = AppError.from(error);
   target.value = appError.message;
+}
+
+/**
+ * 重新识别当前视频：重跑一次身份解析，键变了就把字幕与任务一起换成新键的。
+ *
+ * 这条路径专治「面板认的视频和正在播的不是同一个」：B 站 SPA 切换时地址与 DOM 有
+ * 一两秒错位，面板若在那时挂载就会拿错视频去取字幕。用户点一下即可自愈，
+ * 不必刷新整页（刷新会丢掉正在跑的总结进度）。
+ */
+async function reloadIdentity(): Promise<void> {
+  if (identityBusy.value) return;
+  identityBusy.value = true;
+  identityNotice.value = null;
+  const before = videoKey.value;
+  try {
+    await loadVideo();
+    const after = videoKey.value;
+    if (after && after !== before) {
+      subtitle.value = null;
+      discovery.value = null;
+      selectedTrackId.value = null;
+      subtitleError.value = null;
+      task.value = null;
+      identityNotice.value = `已重新识别为「${title.value}」`;
+      await Promise.all([loadSubtitle(), loadTask()]);
+    } else if (after && after === before) {
+      identityNotice.value =
+        '地址没有变化，面板认的视频和刚才一样。如果是刚切换过视频，等一两秒再点一次；始终不对就刷新 B 站页面。';
+    } else {
+      identityNotice.value = '没能读到当前视频，请刷新 B 站页面后重试。';
+    }
+  } catch (error) {
+    reportError(videoError, error);
+  } finally {
+    identityBusy.value = false;
+  }
 }
 
 async function loadVideo(): Promise<void> {
@@ -608,6 +669,12 @@ async function copyToMubu(): Promise<void> {
  * 为什么不能只取第一条：`player/v2` 对一个视频可能返回多条轨道（自动生成、机翻、
  * UP 主上传），第一条不一定是能用的那条。实测见过只有 1 条、10 秒的占位字幕，
  * 24 分钟的视频拿到的却是它。这里按覆盖率试着往下换，并把最终用的是哪条说清楚。
+ *
+ * 另外两条硬规则：
+ * 1. 取字幕之前先对账「接口说的视频」与「页面正在播的视频」，对不上就不取——
+ *    否则取回来的必然是别人的字幕，而内容看着还很通顺。
+ * 2. 字幕比视频还长的轨道直接弃用。实测有视频 3:04 却取回 6:32 的字幕，
+ *    内容是另一支视频（讲沃尔玛和山姆的），这种素材做出来的总结只会误导人。
  */
 async function discoverAndFetch(): Promise<void> {
   const id = tabId.value;
@@ -619,8 +686,29 @@ async function discoverAndFetch(): Promise<void> {
   subtitleError.value = null;
   subtitleNotice.value = null;
   try {
-    const found = await messageClient.send('subtitle.discover', { tabId: id });
+    let found = await messageClient.send('subtitle.discover', { tabId: id });
     discovery.value = found;
+
+    if (identityMismatch.value) {
+      /**
+       * 可能是刚切过视频的中间态：地址已经是新视频，DOM 还停在旧的（或反过来）。
+       * 等一拍重认一次，键变了就按新视频重来；没变就交给用户点「重新识别」。
+       */
+      const before = videoKey.value;
+      await new Promise((resolve) => {
+        window.setTimeout(resolve, 1200);
+      });
+      await loadVideo();
+      if (videoKey.value && videoKey.value !== before) {
+        found = await messageClient.send('subtitle.discover', { tabId: id });
+        discovery.value = found;
+        identityNotice.value = `已按页面上正在播放的视频重新识别为「${title.value}」`;
+      } else {
+        // 卡片里已经写清楚了，这里不再重复一遍同样的句子，只补一句「下一步做什么」
+        identityNotice.value = '先重新识别当前视频，再取字幕；地址没变就刷新 B 站页面。';
+        return;
+      }
+    }
 
     const primary = pickDefaultTrack(found.tracks);
     if (!primary) {
@@ -631,7 +719,8 @@ async function discoverAndFetch(): Promise<void> {
     const order = [primary, ...listFetchableTracks(found.tracks).filter((item) => item.id !== primary.id)];
     const attempts = order.slice(0, TRACK_COVERAGE.maxAutoAttempts);
     const triedLabels: string[] = [];
-    let best: NormalizedSubtitle | null = null;
+    let chosen: NormalizedSubtitle | null = null;
+    let chosenCoverage: SubtitleCoverage | null = null;
     let lastTrackId: string | null = null;
 
     for (const track of attempts) {
@@ -639,29 +728,46 @@ async function discoverAndFetch(): Promise<void> {
       const doc = await messageClient.send('subtitle.fetch', { tabId: id, trackId: track.id });
       triedLabels.push(track.label);
       lastTrackId = track.id;
-      if (!best || doc.stats.totalDurationMs > best.stats.totalDurationMs) best = doc;
-      // 这条已经够用就不再拉别的，避免为了「最优」多打好几次请求
-      if (!measureSubtitleCoverage(doc.stats, videoDurationSeconds.value).insufficient) break;
+      const coverage = measureSubtitleCoverage(doc.stats, videoDurationSeconds.value);
+      // 覆盖到位就定下来，不再为「最优」多打请求
+      if (isUsableCoverage(coverage)) {
+        chosen = doc;
+        chosenCoverage = coverage;
+        break;
+      }
+      // 都不合格时留第一条做说明用，但不能拿「更长」当更好的判据
+      if (!chosen) {
+        chosen = doc;
+        chosenCoverage = coverage;
+      }
     }
 
-    if (!best) {
+    if (!chosen || !chosenCoverage) {
       subtitleError.value = '字幕轨道都没有返回内容，请稍后重试或导入本地字幕';
       return;
     }
 
-    /**
-     * 缓存里留下的是最后一次拉到的轨道，界面要显示「最好的那条」时得把它再拉一次，
-     * 否则会出现「界面显示 A，下次打开面板变成 B」这种自相矛盾。
-     */
-    if (best.trackId !== lastTrackId) {
-      subtitleBusy.value = 'fetch';
-      best = await messageClient.send('subtitle.fetch', { tabId: id, trackId: best.trackId });
+    if (chosenCoverage.overflows) {
+      // 明显不是这个视频的字幕：不落地、不展示，避免它被当成素材去做总结
+      subtitleError.value =
+        buildCoverageHint(chosenCoverage, chosen.stats, videoDurationSeconds.value) ??
+        '这条字幕的长度和视频对不上，已弃用。';
+      return;
     }
 
-    subtitle.value = best;
-    selectedTrackId.value = best.trackId;
+    /**
+     * 缓存里留下的是最后一次拉到的轨道，界面要显示「选中的那条」时得把它再拉一次，
+     * 否则会出现「界面显示 A，下次打开面板变成 B」这种自相矛盾。
+     */
+    if (chosen.trackId !== lastTrackId) {
+      subtitleBusy.value = 'fetch';
+      chosen = await messageClient.send('subtitle.fetch', { tabId: id, trackId: chosen.trackId });
+    }
+
+    subtitle.value = chosen;
+    selectedTrackId.value = chosen.trackId;
     if (triedLabels.length > 1) {
-      subtitleNotice.value = `自动选用了「${best.label}」：其余 ${triedLabels.length - 1} 条轨道覆盖更短`;
+      subtitleNotice.value = `自动选用了「${chosen.label}」：其余 ${triedLabels.length - 1} 条轨道要么更短，要么长度对不上`;
     }
   } catch (error) {
     reportError(subtitleError, error);
@@ -848,6 +954,25 @@ onBeforeUnmount(() => {
         <p v-if="videoError" class="alert alert--error">{{ videoError }}</p>
       </section>
 
+      <!-- 面板认的视频与页面正在播的不是同一个：先对账再取字幕，而不是拿别人的素材硬讲 -->
+      <section v-if="identityMismatch" class="card">
+        <div class="card__head">
+          <span class="card__title">视频对不上</span>
+          <span class="tag tag--warn">需确认</span>
+        </div>
+        <p class="alert alert--error">{{ identityVerdict.message }}</p>
+        <p class="hint">
+          此时取到的字幕必然是另一支视频的，总结也会跟着跑题。点一下重新识别；地址没变的话刷新 B 站页面。
+        </p>
+        <div class="actions">
+          <button class="btn btn--ghost" type="button" :disabled="identityBusy" @click="reloadIdentity">
+            {{ identityBusy ? '识别中…' : '重新识别当前视频' }}
+          </button>
+        </div>
+      </section>
+
+      <p v-if="identityNotice" class="hint">{{ identityNotice }}</p>
+
       <section class="card">
         <div class="card__head">
           <span class="card__title">字幕</span>
@@ -884,14 +1009,20 @@ onBeforeUnmount(() => {
           <!-- 覆盖率不足时给出可执行的动作：重新读轨道列表并自动挑覆盖最全的一条 -->
           <div v-if="coverageHint" class="coverage">
             <p class="hint hint--warn">{{ coverageHint }}</p>
-            <button
-              class="link-btn"
-              type="button"
-              :disabled="subtitleBusy !== 'idle'"
-              @click="discoverAndFetch"
-            >
-              {{ subtitleBusy === 'idle' ? '重新读取轨道并自动挑选' : '处理中…' }}
-            </button>
+            <div class="coverage__actions">
+              <button
+                class="link-btn"
+                type="button"
+                :disabled="subtitleBusy !== 'idle'"
+                @click="discoverAndFetch"
+              >
+                {{ subtitleBusy === 'idle' ? '重新读取轨道并自动挑选' : '处理中…' }}
+              </button>
+              <!-- 字幕长度对不上时，最常见的原因是面板认错了视频，所以把重新识别摆在这里 -->
+              <button class="link-btn" type="button" :disabled="identityBusy" @click="reloadIdentity">
+                {{ identityBusy ? '识别中…' : '重新识别当前视频' }}
+              </button>
+            </div>
           </div>
           <ul class="cues" :class="{ 'cues--full': subtitleExpanded }">
             <li v-for="cue in visibleCues" :key="cue.index" class="cues__item">
@@ -1250,6 +1381,12 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--ok) 10%, transparent);
 }
 
+.tag--warn {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 45%, transparent);
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+}
+
 /* 来源标签：让用户一眼看出结论依据的是「听到的」还是「看到的」 */
 .tag--source {
   color: var(--accent-strong);
@@ -1346,6 +1483,12 @@ onBeforeUnmount(() => {
 
 .coverage .hint {
   margin-top: 8px;
+}
+
+.coverage__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .link-btn {

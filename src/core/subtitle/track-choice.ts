@@ -16,6 +16,14 @@ export const TRACK_COVERAGE = {
   minVideoSeconds: 120,
   /** 字幕总长低于视频时长的该比例，判定为「明显没覆盖到」 */
   minRatio: 0.3,
+  /**
+   * 字幕总长高于视频时长的该比例，判定为「这条字幕不是这个视频的」。
+   *
+   * 真实反馈：3:04 的视频拿到了 6:32 的字幕，内容完全是另一个视频（讲沃尔玛和山姆的）。
+   * 字幕比视频还长，只可能是别处的素材——留着它做总结，出来的结论必然跑题。
+   * 允许 15% 余量，是因为片尾字幕、最后一句话拖过画面结束很常见。
+   */
+  maxRatio: 1.15,
   /** 条数不超过该值的字幕，无论时长如何都不足以支撑总结 */
   minUsefulCues: 3,
   /** 自动切换轨道时最多尝试几条，避免在多轨道视频上反复拉取 */
@@ -53,10 +61,22 @@ export function pickDefaultTrack(tracks: readonly SubtitleTrack[]): SubtitleTrac
 export interface SubtitleCoverage {
   /** 字幕总长 / 视频时长，视频时长未知时为 null */
   ratio: number | null;
-  /** 是否明显不够用 */
+  /** 是否明显不够用（覆盖不到前段） */
   insufficient: boolean;
+  /** 是否明显超出视频时长（多半是别的视频的字幕） */
+  overflows: boolean;
   /** 判定原因，用于生成可读提示 */
-  reason: 'few-cues' | 'short-coverage' | 'ok' | 'unknown';
+  reason: 'few-cues' | 'short-coverage' | 'too-long' | 'ok' | 'unknown';
+}
+
+/**
+ * 这条字幕能不能拿来用。
+ *
+ * 与 `insufficient` 分开写，是因为两者语义不同：不够用是「缺内容」，
+ * 超出时长是「内容不属于这个视频」。前者还能勉强总结，后者必须直接拒绝。
+ */
+export function isUsableCoverage(coverage: SubtitleCoverage): boolean {
+  return !coverage.insufficient && !coverage.overflows;
 }
 
 /**
@@ -70,18 +90,20 @@ export function measureSubtitleCoverage(
   videoDurationSeconds: number | null
 ): SubtitleCoverage {
   if (stats.cueCount < TRACK_COVERAGE.minUsefulCues) {
-    return { ratio: null, insufficient: true, reason: 'few-cues' };
+    return { ratio: null, insufficient: true, overflows: false, reason: 'few-cues' };
   }
 
   const videoSeconds = videoDurationSeconds ?? null;
   if (videoSeconds === null || videoSeconds < TRACK_COVERAGE.minVideoSeconds) {
-    return { ratio: null, insufficient: false, reason: 'unknown' };
+    return { ratio: null, insufficient: false, overflows: false, reason: 'unknown' };
   }
 
   const subtitleSeconds = Math.max(0, stats.totalDurationMs) / 1000;
   const ratio = subtitleSeconds / videoSeconds;
+  const overflows = ratio > TRACK_COVERAGE.maxRatio;
   const insufficient = ratio < TRACK_COVERAGE.minRatio;
-  return { ratio, insufficient, reason: insufficient ? 'short-coverage' : 'ok' };
+  const reason = overflows ? 'too-long' : insufficient ? 'short-coverage' : 'ok';
+  return { ratio, insufficient, overflows, reason };
 }
 
 function clock(ms: number): string {
@@ -98,12 +120,18 @@ function clock(ms: number): string {
  *
  * 只陈述两个数字（字幕到哪、视频多长），不猜原因——是不是轨道选错、视频本身没字幕、
  * 还是 UP 主传了占位字幕，用户看界面上的轨道名比看我们猜测更有用。
+ * 只有一种例外：字幕比视频还长时，可以确定「这不是这个视频的字幕」，就直说。
  */
 export function buildCoverageHint(
   coverage: SubtitleCoverage,
   stats: Pick<SubtitleStats, 'cueCount' | 'totalDurationMs'>,
   videoDurationSeconds: number | null
 ): string | null {
+  if (coverage.reason === 'too-long') {
+    const videoMs = (videoDurationSeconds ?? 0) * 1000;
+    return `这条字幕到 ${clock(stats.totalDurationMs)} 才结束，而视频只有 ${clock(videoMs)}：长出来的部分不可能是这个视频的内容。换一条轨道，或先点「重新识别当前视频」确认面板认的是不是正在播放的这个视频。`;
+  }
+
   if (!coverage.insufficient) return null;
 
   if (coverage.reason === 'few-cues') {

@@ -28,6 +28,7 @@ function createRouter(overrides: Partial<HandlerRegistry> = {}) {
       loginRequired: false,
       cid: null,
       videoTitle: null,
+      videoDurationSeconds: null,
       fetchedAt: 0
     }),
     'subtitle.fetch': async () => {

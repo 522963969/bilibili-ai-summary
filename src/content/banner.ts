@@ -21,6 +21,9 @@ const PANEL_MIN_HEIGHT = 380;
 const PANEL_VIEWPORT_RESERVE = 150;
 /** 浮层吸顶时与页头（B 站顶部导航 64px）保持的距离。 */
 const HEADER_CLEARANCE = 76;
+/** 入口行高与上下留白，用于在右栏里预留出「我们的位置」。 */
+const ENTRY_HEIGHT = 40;
+const ENTRY_GAP = 8;
 
 /** 右侧信息栏候选容器，按优先级从「最贴近用户预期位置」到兜底排列。 */
 
@@ -126,53 +129,127 @@ const STYLE = `
 `;
 
 /**
- * 把浮层对齐到右栏：横向贴住视频信息栏，纵向吸顶在页头下方。
+ * 把入口「放进」右栏：位置自己算，但占的位置用右栏的 padding 预留出来。
  *
- * 入口不再参与页面布局（插在 Vue 管理的容器里会破坏评论区），所以位置要自己算：
- * 右栏还在视口内时与它顶部对齐，滚过去之后固定在页头下方，
- * 否则浮层会跟着页面滚出屏幕。
+ * 历史教训：
+ * 1. v1.0.0 把入口插进 B 站右栏容器 → 打乱 Vue 的子节点 diff，评论组件不再创建。
+ *    所以节点必须挂在 body 上，绝不能进 Vue 的容器。
+ * 2. v1.0.1 改成 fixed 浮层、跟着滚动吸顶 → 评论区回来了，但浮层直接压在
+ *    「充电 / 关注」按钮上（实测入口 88–128px，按钮顶边 124px），用户第二次反馈遮挡。
+ *
+ * 结论：既要离开 Vue 的 DOM 树，又不能浮在内容上——那就用「absolute 定位 + 给右栏加
+ * padding」模拟一个普通文档流里的块：入口占住 UP 主信息块之后的那条带子，B 站后面的
+ * 内容顺延到下面，谁也不压谁。padding 只是样式，不动 DOM 结构，不会重演 v1.0.0 的问题。
  */
+function pickAnchor(): HTMLElement | null {
+  return (
+    document.querySelector<HTMLElement>('.up-panel-container') ??
+    document.querySelector<HTMLElement>('.right-container-inner') ??
+    document.querySelector<HTMLElement>('.right-container')
+  );
+}
+
+/** 我们改过 padding 的那个容器，以及它原本的 padding，卸载时要还原。 */
+let reservedAnchor: HTMLElement | null = null;
+let basePaddings: Record<string, string> | null = null;
+/** 上一轮实际加进去的预留高度，用来从「含预留的矩形」反推 B 站内容原本的结束位置。 */
+let appliedReserved = 0;
+
+function restoreReservation(): void {
+  if (reservedAnchor && basePaddings) {
+    for (const [prop, value] of Object.entries(basePaddings)) {
+      reservedAnchor.style.setProperty(prop, value);
+    }
+  }
+  reservedAnchor = null;
+  basePaddings = null;
+  appliedReserved = 0;
+}
+
+/**
+ * 在右栏末尾留出「入口（+ 展开的面板）」占用的高度。
+ *
+ * 为什么留在**下面**而不是上面：入口放在 UP 主信息块之后，B 站自己的「充电 / 关注」
+ * 就留在原位不动，只是把后面的弹幕列表、推荐位整体下移，视觉上像在右栏里插了一张卡。
+ * 放在上面的话，一展开面板，UP 主头像和关注按钮会被顶到 700px 以下，反而更别扭。
+ *
+ * 用 padding 而不是 margin：B 站这套右栏的 margin 会被它自己的布局吃掉，
+ * padding 则稳定生效（实测 `.up-panel-container` 的 padding 为 0，改动不留痕）。
+ */
+function reserveSpace(anchor: HTMLElement, reservedPx: number): void {
+  if (reservedAnchor !== anchor || !basePaddings) {
+    restoreReservation();
+    reservedAnchor = anchor;
+    const computed = getComputedStyle(anchor);
+    basePaddings = {
+      'padding-top': anchor.style.paddingTop || computed.paddingTop,
+      'padding-bottom': anchor.style.paddingBottom || computed.paddingBottom
+    };
+  }
+  const base = basePaddings;
+  const baseBottom = Number.parseFloat(base['padding-bottom'] ?? '0') || 0;
+  anchor.style.setProperty('padding-bottom', `${Math.round(baseBottom + reservedPx)}px`);
+  appliedReserved = reservedPx;
+}
+
 function syncHostPosition(): void {
   if (!host) return;
-  const anchor =
-    document.querySelector('.up-panel-container') ??
-    document.querySelector('.right-container-inner') ??
-    document.querySelector('.right-container');
+  const anchor = pickAnchor();
 
   if (!anchor) {
+    // 右栏还没渲染出来（页面刚加载）：先退回贴右边的固定位置，等下一轮再对齐
+    restoreReservation();
+    host.style.position = 'fixed';
     host.style.left = 'auto';
     host.style.right = '20px';
     host.style.top = `${HEADER_CLEARANCE}px`;
+    host.style.width = '350px';
     return;
   }
 
   const rect = anchor.getBoundingClientRect();
   const width = Math.round(rect.width);
   const usableWidth = width >= 280 ? Math.min(width, 352) : 350;
-  const top = Math.max(HEADER_CLEARANCE, Math.round(rect.top));
+  // 矩形已包含上一轮加的预留，减掉它才是 B 站内容真正结束的位置，否则会越算越低
+  const contentBottom = rect.bottom - appliedReserved;
 
+  host.style.position = 'absolute';
   host.style.right = 'auto';
   host.style.width = `${usableWidth}px`;
-  host.style.left = `${Math.round(rect.left)}px`;
-  host.style.top = `${top}px`;
+  host.style.left = `${Math.round(rect.left + window.scrollX)}px`;
+  host.style.top = `${Math.round(contentBottom + window.scrollY + ENTRY_GAP)}px`;
+
+  const expandHeight = drawerOpen ? computePanelHeight() + ENTRY_GAP : 0;
+  const reserved = ENTRY_GAP + ENTRY_HEIGHT + ENTRY_GAP + expandHeight;
+  reserveSpace(anchor, reserved);
 }
 
 let syncPending = false;
 
-/** 滚动/尺寸变化高频触发，用 rAF 合并成每帧最多一次布局读取。 */
+/**
+ * 滚动/尺寸变化高频触发，用 rAF 合并成每帧最多一次布局读取。
+ *
+ * 但 rAF 在后台标签页里会被暂停（页面不可见时浏览器不推进动画帧），
+ * 那样「位置只算一次」的问题就会复发——实测后台窗口里入口一直停在初始的
+ * `top:88px`，压着充电/关注按钮。所以再挂一个 200ms 的定时器兜底，
+ * 谁先到用谁，并保证同一轮只跑一次。
+ */
 function scheduleSync(): void {
   if (syncPending) return;
   syncPending = true;
-  requestAnimationFrame(() => {
+  const run = (): void => {
+    if (!syncPending) return;
     syncPending = false;
     syncHostPosition();
-  });
+  };
+  requestAnimationFrame(run);
+  window.setTimeout(run, 200);
 }
 
-/** 面板高度取「目标高度」与「浮层下方可用高度」的较小值，避免超出屏幕。 */
+/** 面板高度取「目标高度」与「视口可用高度」的较小值，避免超出屏幕。 */
 function computePanelHeight(): number {
-  const top = host ? Number.parseInt(host.style.top, 10) || HEADER_CLEARANCE : HEADER_CLEARANCE;
-  const available = window.innerHeight - top - PANEL_VIEWPORT_RESERVE;
+  // 入口是 absolute 定位（跟着页面滚），所以可用高度按视口算，不再读 host.style.top
+  const available = window.innerHeight - HEADER_CLEARANCE - PANEL_VIEWPORT_RESERVE;
   return Math.max(PANEL_MIN_HEIGHT, Math.min(PANEL_HEIGHT, available));
 }
 
@@ -180,16 +257,20 @@ function buildHost(): void {
   host = document.createElement('div');
   host.id = HOST_ID;
   /**
-   * 必须挂在 body 上、用固定定位，不能插进 B 站的右栏容器。
+   * 必须挂在 body 上，不能插进 B 站的右栏容器。
    *
    * 实测（Edge 156，同一视频页各跑 3 次）：把入口插进 .right-container-inner 之后，
    * 该页面懒加载的评论组件 bili-comments 3/3 次都没有被创建，#commentapp 变成空节点，
    * 页面还多抛一条 Vue 的 HierarchyRequestError；不装扩展时 3/3 次评论组件都在。
    * 原因是右栏整棵子树由 #app 这一个 Vue 实例渲染，往里插外来节点会打乱它的
-   * 子节点 diff，后续组件挂载随之失败。改成 body + fixed 之后评论区恢复。
+   * 子节点 diff，后续组件挂载随之失败。
+   *
+   * 位置用 absolute（文档坐标）而不是 fixed：fixed 会一直压在右栏内容上，
+   * 实测入口盖住了「充电 / 关注」按钮。改为 absolute + 右栏 padding 预留后，
+   * 入口在文档流里占位，跟着页面一起滚动，不遮挡任何东西。
    */
   host.style.cssText =
-    'position:fixed;left:auto;right:20px;top:88px;width:350px;z-index:2147483000;display:block;';
+    'position:absolute;left:auto;right:20px;top:88px;width:350px;z-index:2147483000;display:block;';
   shadow = host.attachShadow({ mode: 'open' });
 
   const style = document.createElement('style');
@@ -319,6 +400,7 @@ async function mount(): Promise<void> {
 
 function unmount(): void {
   if (host?.isConnected) host.remove();
+  restoreReservation();
   drawerOpen = false;
 }
 
@@ -401,6 +483,10 @@ export function startEntry(): void {
     }
     if (isVideoPage() && (!host || !host.isConnected)) {
       void mount();
+      return;
     }
+    // 右栏是懒渲染的：图片、合集列表陆续撑开会让锚点位移，
+    // 我们改的 padding 也可能被 B 站重渲染冲掉，隔一秒校一次最省心。
+    if (host?.isConnected) scheduleSync();
   }, 1000);
 }

@@ -45,6 +45,14 @@ export interface SubtitleDiscovery {
   loginRequired: boolean;
   cid: number | null;
   videoTitle: string | null;
+  /**
+   * 接口侧（`/x/web-interface/view`）返回的视频时长，秒。
+   *
+   * 面板有一份「页面 DOM 里的视频时长」，这里再带一份「接口认为的时长」，
+   * 是为了在取字幕之前就能对账：两边差太多就说明地址与正在播放的视频脱钩了，
+   * 此时取回来的字幕必然是别人的。
+   */
+  videoDurationSeconds: number | null;
   fetchedAt: number;
 }
 
